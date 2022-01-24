@@ -1,13 +1,13 @@
 /*
  * dex2jar - Tools to work with android .dex and java .class files
  * Copyright (c) 2009-2012 Panxiaobo
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -66,6 +66,9 @@ public class Dex2jarCmd extends BaseCmd {
     @Opt(opt = "nc", longOpt = "no-code", hasArg = false, description = "")
     private boolean noCode = false;
 
+    @Opt(opt = "app",longOpt = "applicationName",description = "application full name that method should be insert into",argName = "application-name")
+    private String applicationName;
+
     @Override
     protected void doCommandLine() throws Exception {
         if (remainingArgs.length == 0) {
@@ -107,9 +110,10 @@ public class Dex2jarCmd extends BaseCmd {
 
             BaseDexFileReader reader = MultiDexFileReader.open(Files.readAllBytes(new File(fileName).toPath()));
             BaksmaliBaseDexExceptionHandler handler = notHandleException ? null : new BaksmaliBaseDexExceptionHandler();
-            Dex2jar.from(reader).withExceptionHandler(handler).reUseReg(reuseReg).topoLogicalSort()
+            this.dex2jar = Dex2jar.from(reader);
+            this.dex2jar.withExceptionHandler(handler).reUseReg(reuseReg).topoLogicalSort()
                     .skipDebug(!debugInfo).optimizeSynchronized(this.optmizeSynchronized).printIR(printIR)
-                    .noCode(noCode).skipExceptions(skipExceptions).to(file);
+                    .noCode(noCode).skipExceptions(skipExceptions).setApplicationName(this.applicationName).to(file);
 
             if (!notHandleException) {
                 if (handler.hasException()) {
@@ -125,11 +129,17 @@ public class Dex2jarCmd extends BaseCmd {
         }
     }
 
+    private Dex2jar dex2jar;
+
     @Override
     protected String getVersionString() {
         return "reader-" + DexFileReader.class.getPackage().getImplementationVersion() + ", translator-"
                 + Dex2jar.class.getPackage().getImplementationVersion() + ", ir-"
                 + ET.class.getPackage().getImplementationVersion();
+    }
+
+    public boolean isApplicationClassFounded() {
+        return this.dex2jar == null ? false : this.dex2jar.isApplicationClassFounded();
     }
 
 }
