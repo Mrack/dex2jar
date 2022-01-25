@@ -66,8 +66,6 @@ public class Dex2jarCmd extends BaseCmd {
     @Opt(opt = "nc", longOpt = "no-code", hasArg = false, description = "")
     private boolean noCode = false;
 
-    @Opt(opt = "app",longOpt = "applicationName",description = "application full name that method should be insert into",argName = "application-name")
-    private String applicationName;
 
     @Override
     protected void doCommandLine() throws Exception {
@@ -113,7 +111,7 @@ public class Dex2jarCmd extends BaseCmd {
             this.dex2jar = Dex2jar.from(reader);
             this.dex2jar.withExceptionHandler(handler).reUseReg(reuseReg).topoLogicalSort()
                     .skipDebug(!debugInfo).optimizeSynchronized(this.optmizeSynchronized).printIR(printIR)
-                    .noCode(noCode).skipExceptions(skipExceptions).setApplicationName(this.applicationName).to(file);
+                    .noCode(noCode).skipExceptions(skipExceptions).to(file);
 
             if (!notHandleException) {
                 if (handler.hasException()) {
@@ -138,8 +136,5 @@ public class Dex2jarCmd extends BaseCmd {
                 + ET.class.getPackage().getImplementationVersion();
     }
 
-    public boolean isApplicationClassFounded() {
-        return this.dex2jar == null ? false : this.dex2jar.isApplicationClassFounded();
-    }
 
 }

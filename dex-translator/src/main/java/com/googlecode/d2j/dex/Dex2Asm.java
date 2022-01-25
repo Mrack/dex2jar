@@ -30,7 +30,7 @@ public class Dex2Asm {
             return hexDecodeMethodNamePrefix + "$decode_" + x;
         }
     }
-    protected static class Clz {
+    public static class Clz {
         public int access;
         public Clz enclosingClass;
         public Method enclosingMethod;
@@ -464,11 +464,14 @@ public class Dex2Asm {
 
         accept(classNode.anns, cv);
 
+
         if (classNode.fields != null) {
             for (DexFieldNode fieldNode : classNode.fields) {
                 convertField(classNode, fieldNode, cv);
             }
         }
+
+        this.addMethod(classNode, cv);
         if (classNode.methods != null) {
             ClzCtx clzCtx = new ClzCtx();
             clzCtx.classDescriptor = classNode.className;
@@ -506,6 +509,9 @@ public class Dex2Asm {
         IrMethod irMethod = dex2ir(methodNode);
         optimize(irMethod);
         ir2j(irMethod, mv, clzCtx);
+    }
+
+    public void addMethod(DexClassNode classNode, ClassVisitor cv) {
     }
 
     public void convertDex(DexFileNode fileNode, ClassVisitorFactory cvf) {

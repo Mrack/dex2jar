@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 import com.googlecode.d2j.node.DexClassNode;
+import com.googlecode.d2j.node.DexFieldNode;
 import com.googlecode.d2j.node.DexMethodNode;
 import com.googlecode.d2j.reader.BaseDexFileReader;
 import org.objectweb.asm.ClassVisitor;
@@ -47,8 +48,36 @@ import org.objectweb.asm.commons.Remapper;
 import org.objectweb.asm.commons.RemappingClassAdapter;
 
 public class Dex2jar {
-    private boolean isApplicationClassFounded = false;
-    private String applicationName;
+    private static IDexAsm defaultAsm = new IDexAsm() {
+        @Override
+        public boolean convertField(Dex2jar dex2jar, DexClassNode classNode, DexFieldNode fieldNode, ClassVisitor cv) {
+            return false;
+        }
+
+        @Override
+        public boolean convertMethod(Dex2jar dex2jar, DexClassNode classNode, DexMethodNode methodNode, ClassVisitor cv, Dex2Asm.ClzCtx clzCtx) {
+            return false;
+        }
+
+        @Override
+        public boolean addMethod(Dex2jar dex2jar, DexClassNode classNode, ClassVisitor cv) {
+            return false;
+        }
+
+        @Override
+        public boolean convertClass(Dex2jar dex2jar, DexFileNode dfn, DexClassNode classNode, ClassVisitorFactory cvf, Map<String, Dex2Asm.Clz> classes) {
+            return false;
+        }
+
+        @Override
+        public boolean convertCode(Dex2jar dex2jar, DexMethodNode methodNode, MethodVisitor mv, Dex2Asm.ClzCtx clzCtx) {
+            return false;
+        }
+    };
+
+    public static void setAsm(IDexAsm asm) {
+        Dex2jar.defaultAsm = asm;
+    }
 
     public static Dex2jar from(byte[] in) throws IOException {
         return from(new DexFileReader(ZipUtil.readDex(in)));
@@ -74,24 +103,19 @@ public class Dex2jar {
         return from(new File(in));
     }
 
-    public Dex2jar setApplicationName(String appName) {
-        this.applicationName = appName;
-        this.applicationName = this.applicationName.replace('.', '/');
-        if (!this.applicationName.endsWith(";")) {
-            this.applicationName = this.applicationName + ";";
-        }
-
-        if (!this.applicationName.startsWith("L")) {
-            this.applicationName = "L" + this.applicationName;
-        }
-
-        return this;
-    }
     private DexExceptionHandler exceptionHandler;
 
     final private BaseDexFileReader reader;
     private int readerConfig;
     private int v3Config;
+
+    public int getReaderConfig() {
+        return readerConfig;
+    }
+
+    public int getV3Config() {
+        return v3Config;
+    }
 
     private Dex2jar(BaseDexFileReader reader) {
         super();
@@ -141,53 +165,51 @@ public class Dex2jar {
             }
         };
 
-
-
-        (new ExDex2Asm(this.exceptionHandler) {
-            public void convertCode(DexMethodNode methodNode, MethodVisitor mv, ClzCtx clzCtx) {
-                if (methodNode.method.getOwner().equals(Dex2jar.this.applicationName) && methodNode.method.getName().equals("<clinit>")) {
-                    Dex2jar.this.isApplicationClassFounded = true;
-                    mv.visitMethodInsn(184, "com/wind/xposed/entry/XposedModuleEntry", "init", "()V", false);
+        new ExDex2Asm(exceptionHandler) {
+            @Override
+            public void convertField(DexClassNode classNode, DexFieldNode fieldNode, ClassVisitor cv) {
+                if (defaultAsm.convertField(Dex2jar.this, classNode, fieldNode, cv)) {
+                    super.convertField(classNode, fieldNode, cv);
                 }
+            }
 
-                if ((Dex2jar.this.readerConfig & 4) == 0 || !methodNode.method.getName().equals("<clinit>")) {
+            @Override
+            public void convertMethod(DexClassNode classNode, DexMethodNode methodNode, ClassVisitor cv, ClzCtx clzCtx) {
+                if (defaultAsm.convertMethod(Dex2jar.this, classNode, methodNode, cv, clzCtx)) {
+                    super.convertMethod(classNode, methodNode, cv, clzCtx);
+                }
+            }
+
+            @Override
+            public void addMethod(DexClassNode classNode, ClassVisitor cv) {
+                if (defaultAsm.addMethod(Dex2jar.this, classNode, cv)) {
+                    super.addMethod(classNode, cv);
+                }
+            }
+
+            @Override
+            public void convertClass(DexFileNode dfn, DexClassNode classNode, ClassVisitorFactory cvf, Map<String, Clz> classes) {
+                if (defaultAsm.convertClass(Dex2jar.this, dfn, classNode, cvf, classes)) {
+                    super.convertClass(dfn, classNode, cvf, classes);
+                }
+            }
+
+            public void convertCode(DexMethodNode methodNode, MethodVisitor mv, ClzCtx clzCtx) {
+                if ((readerConfig & DexFileReader.SKIP_CODE) != 0) {
+                    // also skip clinit
+                    return;
+                }
+                if (defaultAsm.convertCode(Dex2jar.this, methodNode, mv, clzCtx)) {
                     super.convertCode(methodNode, mv, clzCtx);
                 }
             }
 
-            public void addMethod(DexClassNode classNode, ClassVisitor cv) {
-                if (classNode.className.equals(Dex2jar.this.applicationName)) {
-                    Dex2jar.this.isApplicationClassFounded = true;
-                    boolean hasFoundClinitMethod = false;
-                    if (classNode.methods != null) {
-                        Iterator var4 = classNode.methods.iterator();
-
-                        while(var4.hasNext()) {
-                            DexMethodNode methodNode = (DexMethodNode)var4.next();
-                            if (methodNode.method.getName().equals("<clinit>")) {
-                                hasFoundClinitMethod = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!hasFoundClinitMethod) {
-                        MethodVisitor mv = cv.visitMethod(8, "<clinit>", "()V", (String)null, (String[])null);
-                        mv.visitCode();
-                        mv.visitMethodInsn(184, "com/wind/xposed/entry/XposedModuleEntry", "init", "()V", false);
-                        mv.visitInsn(177);
-                        mv.visitMaxs(0, 0);
-                        mv.visitEnd();
-                    }
-                }
-
-            }
-
+            @Override
             public void optimize(IrMethod irMethod) {
                 T_cleanLabel.transform(irMethod);
-                if (0 != (Dex2jar.this.v3Config & 2)) {
+                if (0 != (v3Config & V3.TOPOLOGICAL_SORT)) {
+                    // T_topologicalSort.transform(irMethod);
                 }
-
                 T_deadCode.transform(irMethod);
                 T_removeLocal.transform(irMethod);
                 T_removeConst.transform(irMethod);
@@ -197,27 +219,28 @@ public class Dex2jar {
                     T_removeLocal.transform(irMethod);
                     T_removeConst.transform(irMethod);
                 }
-
                 T_new.transform(irMethod);
                 T_fillArray.transform(irMethod);
                 T_agg.transform(irMethod);
                 T_multiArray.transform(irMethod);
                 T_voidInvoke.transform(irMethod);
-                if (0 != (Dex2jar.this.v3Config & 4)) {
+                if (0 != (v3Config & V3.PRINT_IR)) {
                     int i = 0;
-                    Iterator var3 = irMethod.stmts.iterator();
-
-                    while(var3.hasNext()) {
-                        Stmt p = (Stmt)var3.next();
+                    for (Stmt p : irMethod.stmts) {
                         if (p.st == Stmt.ST.LABEL) {
-                            LabelStmt labelStmt = (LabelStmt)p;
+                            LabelStmt labelStmt = (LabelStmt) p;
                             labelStmt.displayName = "L" + i++;
                         }
                     }
-
                     System.out.println(irMethod);
                 }
-
+                {
+                    // https://github.com/pxb1988/dex2jar/issues/477
+                    // dead code found in unssa, clean up
+                    T_deadCode.transform(irMethod);
+                    T_removeLocal.transform(irMethod);
+                    T_removeConst.transform(irMethod);
+                }
                 T_type.transform(irMethod);
                 T_unssa.transform(irMethod);
                 T_ir2jRegAssign.transform(irMethod);
@@ -226,17 +249,21 @@ public class Dex2jar {
 
             @Override
             public void ir2j(IrMethod irMethod, MethodVisitor mv, ClzCtx clzCtx) {
-                new IR2JConverter()
-                        .optimizeSynchronized(0 != (V3.OPTIMIZE_SYNCHRONIZED & v3Config))
-                        .clzCtx(clzCtx)
-                        .ir(irMethod)
-                        .asm(mv)
-                        .convert();
+                Dex2jar.this.ir2j(irMethod, mv, clzCtx);
             }
-        }).convertDex(fileNode, cvf);
-
+        }.convertDex(fileNode, cvf);
 
     }
+
+    public void ir2j(IrMethod irMethod, MethodVisitor mv, Dex2Asm.ClzCtx clzCtx) {
+        new IR2JConverter()
+                .optimizeSynchronized(0 != (V3.OPTIMIZE_SYNCHRONIZED & v3Config))
+                .clzCtx(clzCtx)
+                .ir(irMethod)
+                .asm(mv)
+                .convert();
+    }
+
 
     public DexExceptionHandler getExceptionHandler() {
         return exceptionHandler;
@@ -370,7 +397,4 @@ public class Dex2jar {
         return this;
     }
 
-    public boolean isApplicationClassFounded() {
-        return this.isApplicationClassFounded;
-    }
 }
