@@ -51,27 +51,27 @@ public class Dex2jar {
     private static IDexAsm defaultAsm = new IDexAsm() {
         @Override
         public boolean convertField(Dex2jar dex2jar, DexClassNode classNode, DexFieldNode fieldNode, ClassVisitor cv) {
-            return false;
+            return true;
         }
 
         @Override
         public boolean convertMethod(Dex2jar dex2jar, DexClassNode classNode, DexMethodNode methodNode, ClassVisitor cv, Dex2Asm.ClzCtx clzCtx) {
-            return false;
+            return true;
         }
 
         @Override
         public boolean addMethod(Dex2jar dex2jar, DexClassNode classNode, ClassVisitor cv) {
-            return false;
+            return true;
         }
 
         @Override
         public boolean convertClass(Dex2jar dex2jar, DexFileNode dfn, DexClassNode classNode, ClassVisitorFactory cvf, Map<String, Dex2Asm.Clz> classes) {
-            return false;
+            return true;
         }
 
         @Override
         public boolean convertCode(Dex2jar dex2jar, DexMethodNode methodNode, MethodVisitor mv, Dex2Asm.ClzCtx clzCtx) {
-            return false;
+            return true;
         }
     };
 
@@ -195,10 +195,6 @@ public class Dex2jar {
             }
 
             public void convertCode(DexMethodNode methodNode, MethodVisitor mv, ClzCtx clzCtx) {
-                if ((readerConfig & DexFileReader.SKIP_CODE) != 0) {
-                    // also skip clinit
-                    return;
-                }
                 if (defaultAsm.convertCode(Dex2jar.this, methodNode, mv, clzCtx)) {
                     super.convertCode(methodNode, mv, clzCtx);
                 }
@@ -249,19 +245,15 @@ public class Dex2jar {
 
             @Override
             public void ir2j(IrMethod irMethod, MethodVisitor mv, ClzCtx clzCtx) {
-                Dex2jar.this.ir2j(irMethod, mv, clzCtx);
+                new IR2JConverter()
+                        .optimizeSynchronized(0 != (V3.OPTIMIZE_SYNCHRONIZED & v3Config))
+                        .clzCtx(clzCtx)
+                        .ir(irMethod)
+                        .asm(mv)
+                        .convert();
             }
         }.convertDex(fileNode, cvf);
 
-    }
-
-    public void ir2j(IrMethod irMethod, MethodVisitor mv, Dex2Asm.ClzCtx clzCtx) {
-        new IR2JConverter()
-                .optimizeSynchronized(0 != (V3.OPTIMIZE_SYNCHRONIZED & v3Config))
-                .clzCtx(clzCtx)
-                .ir(irMethod)
-                .asm(mv)
-                .convert();
     }
 
 
